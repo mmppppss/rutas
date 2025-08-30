@@ -1,75 +1,97 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useEffect, useState, useRef } from "react";
+import { StyleSheet, View, ActivityIndicator } from "react-native";
+import MapView, { Marker, Circle, Polyline } from "react-native-maps";
+import * as Location from "expo-location";
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+export default function App() {
+    const [location, setLocation] = useState(null);
+    const [locations, setLocations] = useState([]);
+    const mapRef = useRef(null);
 
-export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+    useEffect(() => {
+        let subscription;
+
+        (async () => {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== "granted") {
+                alert("Permiso de ubicación denegado");
+                return;
+            }
+
+            subscription = await Location.watchPositionAsync(
+                {
+                    accuracy: Location.Accuracy.Highest,
+                    timeInterval: 3000,      // cada 3 segundos
+                    distanceInterval: 1,     // cada 1 metro
+                },
+                (loc) => {
+                    setLocation(loc.coords);
+                    setLocations(prev => [...prev, loc.coords]);
+
+                    if (mapRef.current) {
+                        mapRef.current.animateToRegion({
+                            latitude: loc.coords.latitude,
+                            longitude: loc.coords.longitude,
+                            latitudeDelta: 0.01,
+                            longitudeDelta: 0.01,
+                        });
+                    }
+                }
+            );
+        })();
+
+        return () => {
+            if (subscription) subscription.remove();
+        };
+    }, []);
+
+    if (!location) {
+        return (
+            <View style={styles.container}>
+                <ActivityIndicator size="large" color="#0000ff" />
+            </View>
+        );
+    }
+
+    return (
+        <View style={styles.container}>
+            <MapView
+                ref={mapRef}
+                style={styles.map}
+                initialRegion={{
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                    latitudeDelta: 0.002,
+                    longitudeDelta: 0.002,
+                }}
+				minZoomLevel={20}
+                showsUserLocation
+                followsUserLocation
+            >
+
+                {/* Círculo de referencia */}
+                <Circle
+                    center={location}
+                    radius={50}
+                    strokeWidth={2}
+                    strokeColor="green"
+                    fillColor="rgba(0,255,255,0.2)"
+                />
+
+                {/* Ruta de tracking */}
+                {locations.length > 1 && (
+                    <Polyline
+                        coordinates={locations}
+                        strokeColor="blue"
+                        strokeWidth={3}
+                    />
+                )}
+            </MapView>
+        </View>
+    );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+    container: { flex: 1 },
+    map: { flex: 1 },
 });
